@@ -7,11 +7,8 @@ RUN apk --no-cache add \
   git
 
 WORKDIR /src
-COPY go.mod go.sum Makefile ./
-# run vendor install and lint, so we have all deps installed
-RUN make vendor lint
 COPY . .
-RUN make test all
+RUN make vendor lint test all
 
 FROM alpine:latest
 ENV TLS_PORT=9443 \
