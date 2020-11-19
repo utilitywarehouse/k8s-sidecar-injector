@@ -4,35 +4,34 @@ package watcher
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"strings"
 
 	"github.com/golang/glog"
 	"github.com/tumblr/k8s-sidecar-injector/internal/pkg/config"
-	"k8s.io/api/core/v1"
-	apierrs "k8s.io/apimachinery/pkg/api/errors"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
-	k8sv1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
+
+	// in case of local kube config
+	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 )
 
 const (
 	serviceAccountNamespaceFilePath = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
 )
 
-// ErrWatchChannelClosed should restart watcher
-var ErrWatchChannelClosed = errors.New("watcher channel has closed")
-
 // K8sConfigMapWatcher is a struct that connects to the API and collects, parses, and emits sidecar configurations
 type K8sConfigMapWatcher struct {
 	Config
-	client k8sv1.CoreV1Interface
+	sharedInformer cache.SharedInformer
 }
 
 // New creates a new K8sConfigMapWatcher
@@ -72,13 +71,41 @@ func New(cfg Config) (*K8sConfigMapWatcher, error) {
 		return nil, err
 	}
 
-	c.client = clientset.CoreV1()
+	c.sharedInformer, err = newSharedInformer(clientset, c.Namespace, c.ConfigMapLabels)
+	if err != nil {
+		return nil, err
+	}
 	err = validate(&c)
 	if err != nil {
 		return nil, fmt.Errorf("validation failed for K8sConfigMapWatcher: %s", err.Error())
 	}
 	glog.V(2).Infof("Created ConfigMap watcher: apiserver=%s namespace=%s watchlabels=%v", k8sConfig.Host, c.Namespace, c.ConfigMapLabels)
 	return &c, nil
+}
+
+func newSharedInformer(client kubernetes.Interface, namespace string, l map[string]string) (cache.SharedInformer, error) {
+	sharedInformer := cache.NewSharedInformer(
+		&cache.ListWatch{
+			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+				options.LabelSelector = mapStringStringToLabelSelector(l)
+				return client.CoreV1().ConfigMaps(namespace).List(context.Background(), options)
+			},
+			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+				options.LabelSelector = mapStringStringToLabelSelector(l)
+				return client.CoreV1().ConfigMaps(namespace).Watch(context.Background(), options)
+			},
+		},
+		&v1.ConfigMap{},
+		0,
+	)
+	err := sharedInformer.SetWatchErrorHandler(func(r *cache.Reflector, err error) {
+		glog.Errorf("%s", err.Error())
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return sharedInformer, nil
 }
 
 func validate(c *K8sConfigMapWatcher) error {
@@ -91,54 +118,31 @@ func validate(c *K8sConfigMapWatcher) error {
 	if c.ConfigMapLabels == nil {
 		return fmt.Errorf("configmap labels was an uninitialized map")
 	}
-	if c.client == nil {
-		return fmt.Errorf("k8s client was not setup properly")
+	if c.sharedInformer == nil {
+		return fmt.Errorf("k8s informer was not setup properly")
 	}
 	return nil
 }
 
 // Watch watches for events impacting watched ConfigMaps and emits their events across a channel
-func (c *K8sConfigMapWatcher) Watch(ctx context.Context, notifyMe chan<- interface{}) error {
+func (c *K8sConfigMapWatcher) Watch(ctx context.Context, notifyMe chan<- interface{}) {
 	glog.V(3).Infof("Watching for ConfigMaps for changes on namespace=%s with labels=%v", c.Namespace, c.ConfigMapLabels)
-	watcher, err := c.client.ConfigMaps(c.Namespace).Watch(ctx, metav1.ListOptions{
-		LabelSelector: mapStringStringToLabelSelector(c.ConfigMapLabels),
+	c.sharedInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			notifyMe <- struct{}{}
+		},
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			notifyMe <- struct{}{}
+		},
+		DeleteFunc: func(obj interface{}) {
+			notifyMe <- struct{}{}
+		},
 	})
-	if err != nil {
-		return fmt.Errorf("unable to create watcher (possible serviceaccount RBAC/ACL failure?): %s", err.Error())
-	}
-	defer watcher.Stop()
-	for {
-		select {
-		case e, ok := <-watcher.ResultChan():
-			// channel may closed caused by HTTP timeout, should restart watcher
-			// detail at https://github.com/kubernetes/client-go/issues/334
-			if !ok {
-				glog.Errorf("channel has closed, should restart watcher")
-				return ErrWatchChannelClosed
-			}
-			if e.Type == watch.Error {
-				return apierrs.FromObject(e.Object)
-			}
-			glog.V(3).Infof("event: %s %s", e.Type, e.Object.GetObjectKind())
-			switch e.Type {
-			case watch.Added:
-				fallthrough
-			case watch.Modified:
-				fallthrough
-			case watch.Deleted:
-				// signal reconciliation of all InjectionConfigs
-				glog.V(3).Infof("signalling event received from watch channel: %s %s", e.Type, e.Object.GetObjectKind())
-				notifyMe <- struct{}{}
-			default:
-				glog.Errorf("got unsupported event %s for %s! skipping", e.Type, e.Object.GetObjectKind())
-			}
-			// events! yay!
-		case <-ctx.Done():
-			glog.V(2).Infof("stopping configmap watcher, context indicated we are done")
-			// clean up, we cancelled the context, so stop the watch
-			return nil
-		}
-	}
+	c.sharedInformer.Run(ctx.Done())
+}
+
+func (c *K8sConfigMapWatcher) WaitForCacheSync(ctx context.Context) bool {
+	return cache.WaitForCacheSync(ctx.Done(), c.sharedInformer.HasSynced)
 }
 
 func mapStringStringToLabelSelector(m map[string]string) string {
@@ -149,14 +153,17 @@ func mapStringStringToLabelSelector(m map[string]string) string {
 // Get fetches all matching ConfigMaps
 func (c *K8sConfigMapWatcher) Get(ctx context.Context) (cfgs []*config.InjectionConfig, err error) {
 	glog.V(1).Infof("Fetching ConfigMaps...")
-	clist, err := c.client.ConfigMaps(c.Namespace).List(ctx, metav1.ListOptions{
-		LabelSelector: mapStringStringToLabelSelector(c.ConfigMapLabels),
-	})
-	if err != nil {
-		return cfgs, err
+	var configMaps []v1.ConfigMap
+	for _, obj := range c.sharedInformer.GetStore().List() {
+		cm, ok := obj.(*v1.ConfigMap)
+		if !ok {
+			glog.Errorf("can't read configmap object: %s", obj)
+			continue
+		}
+		configMaps = append(configMaps, *cm)
 	}
-	glog.V(1).Infof("Fetched %d ConfigMaps", len(clist.Items))
-	for _, cm := range clist.Items {
+	glog.V(1).Infof("Fetched %d ConfigMaps", len(configMaps))
+	for _, cm := range configMaps {
 		injectionConfigsForCM, err := InjectionConfigsFromConfigMap(cm)
 		if err != nil {
 			return cfgs, fmt.Errorf("error getting ConfigMaps from API: %s", err.Error())

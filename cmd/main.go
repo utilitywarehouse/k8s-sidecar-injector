@@ -110,20 +110,12 @@ func main() {
 		// debounce events from sigChan, so we dont hammer apiserver on reconciliation
 		eventsCh := coalescer.Coalesce(ctx, EventCoalesceWindow, sigChan)
 
-		go func() {
-			for {
-				glog.Infof("launching watcher for ConfigMaps")
-				err := configWatcher.Watch(ctx, sigChan)
-				if err != nil {
-					switch err {
-					case watcher.ErrWatchChannelClosed:
-						glog.Errorf("watcher got error, try to restart watcher: %s", err.Error())
-					default:
-						glog.Fatalf("error watching for new ConfigMaps (terminating): %s", err.Error())
-					}
-				}
-			}
-		}()
+		glog.Infof("Launching watcher for ConfigMaps")
+		go configWatcher.Watch(ctx, sigChan)
+
+		if !configWatcher.WaitForCacheSync(ctx) {
+			glog.Fatalf("ConfigMap watcher cache was not synced")
+		}
 
 		for {
 			select {
