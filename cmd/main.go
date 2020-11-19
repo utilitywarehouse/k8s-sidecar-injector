@@ -11,23 +11,15 @@ import (
 	"os/signal"
 	"runtime"
 	"syscall"
-	"time"
 
 	"github.com/golang/glog"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/tumblr/k8s-sidecar-injector/internal/pkg/config"
-	"github.com/tumblr/k8s-sidecar-injector/internal/pkg/config/watcher"
 	"github.com/tumblr/k8s-sidecar-injector/internal/pkg/version"
-	"github.com/tumblr/k8s-sidecar-injector/pkg/coalescer"
 	"github.com/tumblr/k8s-sidecar-injector/pkg/server"
 
 	"github.com/dyson/certman"
-)
-
-var (
-	// EventCoalesceWindow is the window for coalescing events from ConfigMapWatcher
-	EventCoalesceWindow = time.Second * 3
 )
 
 // ShowVersion shows the version of the jawner
@@ -53,8 +45,6 @@ func main() {
 	var (
 		parameters server.Parameters
 	)
-	cmWatcherLabels := NewMapStringStringFlag()
-	watcherConfig := watcher.NewConfig()
 
 	// get command line parameters
 	flag.IntVar(&parameters.LifecyclePort, "lifecycle-port", 9000, "Metrics and introspection port (metrics, healthchecking, etc)")
@@ -63,18 +53,11 @@ func main() {
 	flag.StringVar(&parameters.KeyFile, "tls-key-file", "/var/lib/secrets/cert.key", "File containing the x509 private key to --tls-cert-file.")
 	flag.StringVar(&parameters.ConfigDirectory, "config-directory", "conf/", "Config directory (will load all .yaml files in this directory)")
 	flag.StringVar(&parameters.AnnotationNamespace, "annotation-namespace", "injector.tumblr.com", "Override the AnnotationNamespace")
-	flag.StringVar(&watcherConfig.Namespace, "configmap-namespace", "", "Namespace to search for ConfigMaps to load Injection Configs from (default: current namespace)")
-	flag.Var(&cmWatcherLabels, "configmap-labels", "Label pairs used to discover ConfigMaps in Kubernetes. These should be key1=value[,key2=val2,...]")
-	flag.StringVar(&watcherConfig.MasterURL, "master-url", "", "Kubernetes master URL (used for running outside of the cluster)")
-	flag.StringVar(&watcherConfig.Kubeconfig, "kubeconfig", "", "Kubernetes kubeconfig (used only for running outside of the cluster)")
 	flag.Parse()
-
-	watcherConfig.ConfigMapLabels = cmWatcherLabels.ToMapStringString()
 
 	glog.Infof("Launching k8s-sidecar-injector version=%s commit=%s branch=%s golang=%s\n", version.Version, version.Commit, version.Branch, runtime.Version())
 
 	glog.V(2).Infof("Loaded server configuration parameters %+v", parameters)
-	glog.V(2).Infof("Loaded ConfigMap watcher configuration %+v", watcherConfig)
 	cfg, err := config.LoadConfigDirectory(parameters.ConfigDirectory)
 	if err != nil {
 		glog.Errorf("Failed to load configuration: %v", err)
@@ -91,70 +74,6 @@ func main() {
 	for _, v := range cfg.Injections {
 		glog.Infof("  %s", v.String())
 	}
-
-	// start up the watcher, and get the first batch of ConfigMaps
-	// to set in the config.
-	// make sure to union this with any file configs we loaded from disk
-	configWatcher, err := watcher.New(*watcherConfig)
-	if err != nil {
-		glog.Errorf("Error creating ConfigMap watcher: %s", err.Error())
-		os.Exit(1)
-	}
-
-	go func() {
-		// watch for reconciliation signals, and grab configmaps, then update the running configuration
-		// for the server
-		sigChan := make(chan interface{}, 10)
-		//debouncedChan := make(chan interface{}, 10)
-
-		// debounce events from sigChan, so we dont hammer apiserver on reconciliation
-		eventsCh := coalescer.Coalesce(ctx, EventCoalesceWindow, sigChan)
-
-		go func() {
-			for {
-				glog.Infof("launching watcher for ConfigMaps")
-				err := configWatcher.Watch(ctx, sigChan)
-				if err != nil {
-					switch err {
-					case watcher.ErrWatchChannelClosed:
-						glog.Errorf("watcher got error, try to restart watcher: %s", err.Error())
-					default:
-						glog.Fatalf("error watching for new ConfigMaps (terminating): %s", err.Error())
-					}
-				}
-			}
-		}()
-
-		for {
-			select {
-			case <-eventsCh:
-				glog.V(1).Infof("triggering ConfigMap reconciliation")
-				updatedInjectionConfigs, err := configWatcher.Get(ctx)
-				if err != nil {
-					glog.Errorf("error reconciling configmaps: %s", err.Error())
-					continue
-				}
-				glog.V(1).Infof("got %d updated InjectionConfigs from reconciliation", len(updatedInjectionConfigs))
-
-				newInjectionConfigs := make([]*config.InjectionConfig, len(updatedInjectionConfigs)+len(cfg.Injections))
-				{
-					i := 0
-					for k := range cfg.Injections {
-						newInjectionConfigs[i] = cfg.Injections[k]
-						i++
-					}
-					for i, watched := range updatedInjectionConfigs {
-						newInjectionConfigs[i+len(cfg.Injections)] = watched
-					}
-				}
-
-				glog.V(1).Infof("updating server with newly loaded configurations (%d loaded from disk, %d loaded from k8s api)", len(cfg.Injections), len(updatedInjectionConfigs))
-				cfg.ReplaceInjectionConfigs(newInjectionConfigs)
-				glog.V(1).Infof("configuration replaced")
-			}
-		}
-
-	}()
 
 	// web server listening for healthchecks, metrics requests, etc
 	lifecycleServer := &http.Server{

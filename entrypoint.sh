@@ -6,9 +6,6 @@ CONFIG_DIR="${CONFIG_DIR:-/conf}"
 TLS_CERT_FILE="${TLS_CERT_FILE:-/var/lib/secrets/cert.crt}"
 TLS_KEY_FILE="${TLS_KEY_FILE:-/var/lib/secrets/cert.key}"
 ANNOTATION_NAMESPACE="${ANNOTATION_NAMESPACE:-injector.tumblr.com}"
-CONFIGMAP_LABELS="${CONFIGMAP_LABELS:-app=k8s-sidecar-injector}"
-CONFIGMAP_NAMESPACE="${CONFIGMAP_NAMESPACE:-}"
-ANNOTATION_NAMESPACE="${ANNOTATION_NAMESPACE:-injector.tumblr.com}"
 LOG_LEVEL="${LOG_LEVEL:-2}"
 echo "k8s-sidecar-injector starting at $(date) with TLS_PORT=${TLS_PORT} CONFIG_DIR=${CONFIG_DIR} TLS_CERT_FILE=${TLS_CERT_FILE} TLS_KEY_FILE=${TLS_KEY_FILE}"
 set -x
@@ -20,7 +17,5 @@ exec k8s-sidecar-injector \
   --config-directory="${CONFIG_DIR}" \
   --tls-cert-file="${TLS_CERT_FILE}" \
   --tls-key-file="${TLS_KEY_FILE}" \
-  --configmap-labels="${CONFIGMAP_LABELS}" \
-  --configmap-namespace="${CONFIGMAP_NAMESPACE}" \
   --annotation-namespace="${ANNOTATION_NAMESPACE}" \
   "$@"
