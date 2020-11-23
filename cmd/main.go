@@ -15,9 +15,9 @@ import (
 	"github.com/golang/glog"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
-	"github.com/tumblr/k8s-sidecar-injector/internal/pkg/config"
-	"github.com/tumblr/k8s-sidecar-injector/internal/pkg/version"
-	"github.com/tumblr/k8s-sidecar-injector/pkg/server"
+	"github.com/utilitywarehouse/k8s-sidecar-injector/internal/pkg/config"
+	"github.com/utilitywarehouse/k8s-sidecar-injector/internal/pkg/version"
+	"github.com/utilitywarehouse/k8s-sidecar-injector/pkg/server"
 
 	"github.com/dyson/certman"
 )

@@ -12,7 +12,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/tumblr/k8s-sidecar-injector/internal/pkg/config"
+	"github.com/utilitywarehouse/k8s-sidecar-injector/internal/pkg/config"
 	"k8s.io/api/admission/v1beta1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	corev1 "k8s.io/api/core/v1"
