@@ -1,0 +1,13 @@
+# Patch the webhook configuration with the namespace the webhook is deployed in
+# and the inject-ca-from annotation which will inject the CA certificate
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: "tumblr-sidecar-injector-webhook"
+  annotations:
+    cert-manager.io/inject-ca-from: kube-system/k8s-sidecar-injector-serving-cert
+webhooks:
+  - name: "injector.tumblr.com"
+    clientConfig:
+      service:
+        namespace: "kube-system"
