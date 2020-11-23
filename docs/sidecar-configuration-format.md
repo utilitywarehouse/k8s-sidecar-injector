@@ -1,8 +1,7 @@
 # Sidecar Configuration Format
 
-Config is can be loaded from 2 sources:
-* `--config-directory`: load all YAML configs that define a sidecar configuration
-* Kubernetes ConfigMaps: `--configmap-labels` and `--configmap-namespace` controls how the injector finds ConfigMaps to load sidecar configurations from
+Config is loaded from YAML files in the directory specified by the
+`--config-directory` flag.
 
 A sidecar configuration looks like:
 

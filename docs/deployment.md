@@ -9,7 +9,7 @@ Example Kubernetes manifests are provided in [/examples/kubernetes](/examples/ku
 ```
 kubectl create secret generic k8s-sidecar-injector --from-file=examples/tls/${DEPLOYMENT}/${CLUSTER}/sidecar-injector.crt --from-file=examples/tls/${DEPLOYMENT}/${CLUSTER}/sidecar-injector.key --namespace=kube-system
 ```
-5. Create ConfigMaps (or sidecar config files on disk somewhere) so the injector has some sidecars to inject :) [/docs/configmaps.md](/docs/configmaps.md)
+5. Create a ConfigMap containing some config files and mount it in the container so the injector has some sidecars to inject :) [/docs/sidecar-configuration-format.md](/docs/sidecar-configuration-format.md)
 
 Once you hack the example Kubernetes manifests to work for your deployment, deploy them to your cluster. The list of manifests you should deploy are below:
 
@@ -22,24 +22,6 @@ Once you hack the example Kubernetes manifests to work for your deployment, depl
 * [mutating-webhook-configuration.yaml](/examples/kubernetes/mutating-webhook-configuration.yaml)
 
 A sample ConfigMap is included to test injections at [/examples/kubernetes/configmap-sidecar-test.yaml](/examples/kubernetes/configmap-sidecar-test.yaml).
-
-Add it to the cluster, and you should see it show up in the logs for the sidecar injector.
-
-```bash
-$ kubectl create -f examples/kubernetes/configmap-sidecar-test.yaml
-configmap/sidecar-test created
-$ kubectl logs --tail=60 -n kube-system -l k8s-app=k8s-sidecar-injector
-...
-I1119 16:25:10.782478       1 main.go:124] triggering ConfigMap reconciliation
-I1119 16:25:10.782536       1 watcher.go:140] Fetching ConfigMaps...
-I1119 16:25:10.792451       1 watcher.go:147] Fetched 1 ConfigMaps
-I1119 16:25:10.792757       1 watcher.go:168] Loaded InjectionConfig test1 from ConfigMap sidecar-test:test1
-I1119 16:25:10.792778       1 watcher.go:153] Found 1 InjectionConfigs in sidecar-test
-I1119 16:25:10.792788       1 main.go:130] got 1 updated InjectionConfigs from reconciliation
-I1119 16:25:10.792800       1 main.go:144] updating server with newly loaded configurations (5 loaded from disk, 1 loaded from k8s api)
-I1119 16:25:10.792813       1 main.go:146] configuration replaced
-...
-```
 
 Now, you are ready to create your first pod that asks for an injection:
 
