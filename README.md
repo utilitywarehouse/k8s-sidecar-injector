@@ -69,3 +69,5 @@ See [hacking.md](/docs/hacking.md)
 [Apache 2.0](/LICENSE.txt)
 
 Copyright 2019, Tumblr, Inc.
+
+Copyright (c) 2020 Utility Warehouse Ltd.
