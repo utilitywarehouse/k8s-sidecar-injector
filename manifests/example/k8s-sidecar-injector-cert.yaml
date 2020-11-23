@@ -1,0 +1,19 @@
+apiVersion: cert-manager.io/v1alpha2
+kind: Issuer
+metadata:
+  name: k8s-sidecar-injector-selfsigned-issuer
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1alpha2
+kind: Certificate
+metadata:
+  name: k8s-sidecar-injector-serving-cert
+spec:
+  dnsNames:
+    - k8s-sidecar-injector.kube-system.svc
+    - k8s-sidecar-injector.kube-system.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: k8s-sidecar-injector-selfsigned-issuer
+  secretName: k8s-sidecar-injector-webhook-server-cert
