@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	testhelper "github.com/tumblr/k8s-sidecar-injector/internal/pkg/testing"
+	testhelper "github.com/utilitywarehouse/k8s-sidecar-injector/internal/pkg/testing"
 )
 
 var (
