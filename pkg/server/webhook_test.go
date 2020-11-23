@@ -1,10 +1,13 @@
 package server
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path"
 	"path/filepath"
@@ -14,7 +17,7 @@ import (
 	"github.com/nsf/jsondiff" // for json diffing patches
 	"github.com/utilitywarehouse/k8s-sidecar-injector/internal/pkg/config"
 	_ "github.com/utilitywarehouse/k8s-sidecar-injector/internal/pkg/testing"
-	"k8s.io/api/admission/v1beta1"
+	v1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -79,7 +82,7 @@ type expectedSidecarConfiguration struct {
 
 type mutationTest struct {
 	// name is a file relative to test/fixtures/k8s/admissioncontrol/request/ ending in .yaml
-	//  which is the v1beta1.AdmissionRequest object passed to mutate
+	//  which is the v1.AdmissionRequest object passed to mutate
 	name          string
 	allowed       bool
 	patchExpected bool
@@ -143,7 +146,7 @@ func TestMutation(t *testing.T) {
 
 	for _, test := range mutationTests {
 		// now, try to perform the mutation on the k8s object
-		var req v1beta1.AdmissionRequest
+		var req v1.AdmissionRequest
 		reqFile := fmt.Sprintf("test/fixtures/k8s/admissioncontrol/request/%s.yaml", test.name)
 		resPatchFile := fmt.Sprintf("test/fixtures/k8s/admissioncontrol/patch/%s.json", test.name)
 		// load the AdmissionRequest object
@@ -186,5 +189,69 @@ func TestMutation(t *testing.T) {
 			}
 		}
 
+	}
+}
+
+func TestMutateHandler(t *testing.T) {
+	// Setup WebhookServer with injection configuration
+	c, err := config.LoadConfigDirectory(sidecars)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.AnnotationNamespace = "injector.unittest.com"
+	whsvr := &WebhookServer{
+		Config: c,
+	}
+
+	// Retrieve an admission request from file and construct a http
+	// request from it
+	var admissionRequest v1.AdmissionRequest
+	reqFile := "test/fixtures/k8s/admissioncontrol/request/sidecar-test-1.yaml"
+	reqData, err := ioutil.ReadFile(reqFile)
+	if err != nil {
+		t.Fatalf("%s: unable to load AdmissionRequest object: %v", reqFile, err)
+	}
+	if err := yaml.Unmarshal(reqData, &admissionRequest); err != nil {
+		t.Fatalf("%s: unable to unmarshal AdmissionRequest yaml: %v", reqFile, err)
+	}
+	requestedAdmissionReview := &v1.AdmissionReview{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "AdmissionReview",
+			APIVersion: "admission.k8s.io/v1",
+		},
+		Request: &admissionRequest,
+	}
+	revData, err := json.Marshal(requestedAdmissionReview)
+	if err != nil {
+		t.Fatalf("unable to marshal admission review: %s", err)
+	}
+	req, err := http.NewRequest("POST", "", bytes.NewBuffer(revData))
+	if err != nil {
+		t.Fatalf("unable to create request: %s", err)
+	}
+	req.Header.Set("Content-type", "application/json")
+
+	// Handle the request with mutateHandler and record it with a
+	// httptest.Recorder
+	rr := httptest.NewRecorder()
+	whsvr.MutateHandler().ServeHTTP(rr, req)
+
+	// Unmarshal into JSON and check that the fields set by the
+	// mutateHandler have the expected values
+	var respondedAdmissionReview v1.AdmissionReview
+	if err := json.Unmarshal(rr.Body.Bytes(), &respondedAdmissionReview); err != nil {
+		t.Fatalf("unable to unmarshal response: %s", err)
+	}
+
+	if respondedAdmissionReview.Kind != "AdmissionReview" {
+		t.Errorf("expected Kind to be AdmissionReview, got %s", respondedAdmissionReview.Kind)
+	}
+
+	if respondedAdmissionReview.APIVersion != "admission.k8s.io/v1" {
+		t.Errorf("expected APIVersion to be admission.k8s.io/v1, got %s", respondedAdmissionReview.Kind)
+	}
+
+	if respondedAdmissionReview.Response.UID != requestedAdmissionReview.Request.UID {
+		t.Errorf("expected response UID to be %s but got %s", requestedAdmissionReview.Request.UID, respondedAdmissionReview.Response.UID)
 	}
 }

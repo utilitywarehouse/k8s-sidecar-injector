@@ -116,7 +116,7 @@ webhooks:
       matchExpressions:
         - key: injector.tumblr.com/ignore
           operator: DoesNotExist
-    admissionReviewVersions: ["v1beta1"]
+    admissionReviewVersions: ["v1"]
     sideEffects: None
     timeoutSeconds: 5
     rules:
