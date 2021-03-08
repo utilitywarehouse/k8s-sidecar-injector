@@ -32,6 +32,16 @@ spec:
   selector:
     app.kubernetes.io/name: k8s-sidecar-injector
 ---
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: k8s-sidecar-injector
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: k8s-sidecar-injector
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -60,7 +70,7 @@ spec:
             name: k8s-sidecar-injector-configs
         - name: secrets
           secret:
-            secretName: k8s-sidecar-injector-webhook-server-cert 
+            secretName: k8s-sidecar-injector-webhook-server-cert
       containers:
         - name: "k8s-sidecar-injector"
           image: quay.io/utilitywarehouse/k8s-sidecar-injector:v0.7.0
