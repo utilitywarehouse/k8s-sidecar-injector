@@ -63,6 +63,18 @@ spec:
       labels:
         app.kubernetes.io/name: k8s-sidecar-injector
     spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app.kubernetes.io/name
+                      operator: In
+                      values:
+                        - k8s-sidecar-injector
+                topologyKey: kubernetes.io/hostname
+              weight: 100
       serviceAccountName: k8s-sidecar-injector
       volumes:
         - name: configs
