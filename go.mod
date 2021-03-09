@@ -14,15 +14,12 @@ require (
 	github.com/prometheus/client_golang v1.9.0
 	github.com/prometheus/common v0.18.0 // indirect
 	github.com/prometheus/procfs v0.6.0 // indirect
-	golang.org/x/lint v0.0.0-20201208152925-83fdc39ff7b5 // indirect
 	golang.org/x/net v0.0.0-20210226172049-e18ecbb05110 // indirect
 	golang.org/x/sys v0.0.0-20210309074719-68d13333faf2 // indirect
 	golang.org/x/text v0.3.5 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	k8s.io/api v0.20.2
 	k8s.io/apimachinery v0.20.2
-	k8s.io/klog v1.0.0 // indirect
 	k8s.io/klog/v2 v2.6.0 // indirect
-	sigs.k8s.io/structured-merge-diff/v3 v3.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.1.0 // indirect
 )
