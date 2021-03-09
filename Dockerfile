@@ -1,4 +1,4 @@
-ARG GO_VERSION=1.15.0
+ARG GO_VERSION=1.16.0
 FROM golang:${GO_VERSION}-alpine
 
 RUN apk --no-cache add \
@@ -8,7 +8,7 @@ RUN apk --no-cache add \
 
 WORKDIR /src
 COPY . .
-RUN make vendor lint test all
+RUN make lint test all
 
 FROM alpine:latest
 ENV TLS_PORT=9443 \
