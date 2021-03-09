@@ -6,7 +6,7 @@ COMMIT  ?= $(shell git rev-parse HEAD)
 VERSION ?= $(shell git describe --tags --always --dirty --match=v* 2> /dev/null || \
 			cat $(CURDIR)/.version 2> /dev/null || echo v0)
 BIN      = $(GOPATH)/bin
-PKGS     = $(or $(PKG),$(shell $(GO) list ./... | grep -v "^$(PACKAGE)/vendor/"))
+PKGS     = $(or $(PKG),$(shell $(GO) list ./...))
 TESTPKGS = $(shell env $(GO) list -f '{{ if or .TestGoFiles .XTestGoFiles }}{{ .ImportPath }}{{ end }}' $(PKGS))
 DOCKER_IMAGE_BASE = quay.io/utilitywarehouse/k8s-sidecar-injector
 DOCKER_TAG = $(VERSION)
@@ -21,7 +21,7 @@ Q = $(if $(filter 1,$V),,@)
 M = $(shell printf "\033[34;1m▶\033[0m")
 
 .PHONY: all
-all: fmt lint vendor | ; $(info $(M) building executable…) @ ## Build program binary
+all: fmt lint | ; $(info $(M) building executable…) @ ## Build program binary
 	$Q $(GO) build \
 		-tags release \
 		-ldflags '-X $(PACKAGE)/internal/pkg/version.Version=$(VERSION) -X $(PACKAGE)/internal/pkg/version.BuildDate=$(DATE) -X $(PACKAGE)/internal/pkg/version.Package=$(PACKAGE) -X $(PACKAGE)/internal/pkg/version.Commit=$(COMMIT) -X $(PACKAGE)/internal/pkg/version.Branch=$(BRANCH)' \
@@ -62,10 +62,10 @@ test-verbose: ARGS=-v            ## Run tests in verbose mode with coverage repo
 test-race:    ARGS=-race         ## Run tests with race detector
 $(TEST_TARGETS): NAME=$(MAKECMDGOALS:test-%=%)
 $(TEST_TARGETS): test
-check test tests: fmt lint vendor | ; $(info $(M) running $(NAME:%=% )tests…) @ ## Run tests
+check test tests: fmt lint | ; $(info $(M) running $(NAME:%=% )tests…) @ ## Run tests
 	$Q $(GO) test -count=1 -timeout=$(TIMEOUT)s $(ARGS) $(TESTPKGS)
 
-test-xml: fmt lint vendor | $(GO2XUNIT) ; $(info $(M) running $(NAME:%=% )tests…) @ ## Run tests with xUnit output
+test-xml: fmt lint | $(GO2XUNIT) ; $(info $(M) running $(NAME:%=% )tests…) @ ## Run tests with xUnit output
 	$Q 2>&1 $(GO) test -count=1 -timeout=$(TIMEOUT)s -v $(TESTPKGS) | tee test/tests.output
 	$(GO2XUNIT) -fail -input test/tests.output -output test/tests.xml
 
@@ -76,13 +76,12 @@ COVERAGE_HTML = $(COVERAGE_DIR)/index.html
 .PHONY: test-coverage test-coverage-tools
 test-coverage-tools: | $(GOCOVMERGE) $(GOCOV) $(GOCOVXML)
 test-coverage: COVERAGE_DIR := $(CURDIR)/test/coverage.$(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
-test-coverage: fmt lint vendor test-coverage-tools | ; $(info $(M) running coverage tests…) @ ## Run coverage tests
+test-coverage: fmt lint test-coverage-tools | ; $(info $(M) running coverage tests…) @ ## Run coverage tests
 	$Q mkdir -p $(COVERAGE_DIR)/coverage
 	$Q for pkg in $(TESTPKGS); do \
 		$(GO) test \
 			-coverpkg=$$($(GO) list -f '{{ join .Deps "\n" }}' $$pkg | \
-					grep '^$(PACKAGE)/' | grep -v '^$(PACKAGE)/vendor/' | \
-					tr '\n' ',')$$pkg \
+					grep '^$(PACKAGE)/' | tr '\n' ',')$$pkg \
 			-covermode=$(COVERAGE_MODE) \
 			-coverprofile="$(COVERAGE_DIR)/coverage/`echo $$pkg | tr "/" "-"`.cover" $$pkg ;\
 	 done
@@ -96,7 +95,7 @@ docker: | ; $(info $(M) building docker container…)
 	docker build -t $(DOCKER_IMAGE_BASE):latest .
 
 .PHONY: lint
-lint: vendor | $(GOLINT) ; $(info $(M) running golint…)
+lint: $(GOLINT) ; $(info $(M) running golint…)
 	$Q $(GOLINT) $(PKGS)
 
 .PHONY: fmt
@@ -105,13 +104,8 @@ fmt: ; $(info $(M) running gofmt…) @
 
 # Dependency management
 
-vendor: go.mod go.sum | ; $(info $(M) retrieving dependencies…)
-	$Q $(GO) mod download 2>&1
-	$Q $(GO) mod vendor
-
 .PHONY: clean
 clean: ; $(info $(M) cleaning…)	@ ## Cleanup everything
-	@rm -rf vendor/
 	@rm -rf bin
 	@rm -rf test/tests.* test/coverage.*
 
