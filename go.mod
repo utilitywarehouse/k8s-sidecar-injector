@@ -1,6 +1,6 @@
 module github.com/utilitywarehouse/k8s-sidecar-injector
 
-go 1.15
+go 1.16
 
 require (
 	github.com/dyson/certman v0.2.1
