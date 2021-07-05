@@ -47,7 +47,6 @@ endpoints         |                                                      | load 
           +----------------+
 ```
 
-
 # Run
 
 The image is built and published on [Quay](https://quay.io/repository/utilitywarehouse/k8s-sidecar-injector). See [the example](/manifests/example) for how to run this in Kubernetes.
@@ -58,11 +57,21 @@ The image is built and published on [Quay](https://quay.io/repository/utilitywar
 $ ./bin/k8s-sidecar-injector --tls-port=9000 --config-directory=conf/ --tls-cert-file="${TLS_CERT_FILE}" --tls-key-file="${TLS_KEY_FILE}"
 ```
 
-*NOTE*: this is not a supported method of running in production. You are highly encouraged to deploy this to Kubernetes in [The Supported Way](/manifests/example).
+_NOTE_: this is not a supported method of running in production. You are highly encouraged to deploy this to Kubernetes in [The Supported Way](/manifests/example).
 
 # Hacking
 
 See [hacking.md](/docs/hacking.md)
+
+# Updating
+
+Run `make release VERSION=<version>` to create a new release.
+This will create a commit which updates the image in the deployment manifests
+and another which reverts the image tag to 'latest'. Tag the former commit
+with the release version.
+
+This ensures that the release tag points to manifests that include the
+corresponding image version but the `master` branch gives you the `latest` tag.
 
 # License
 

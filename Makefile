@@ -1,10 +1,12 @@
 PACKAGE  = github.com/utilitywarehouse/k8s-sidecar-injector
 BINARY   = k8s-sidecar-injector
+IMAGE    = quay.io/utilitywarehouse/k8s-sidecar-injector
 DATE    ?= $(shell date +%FT%T%z)
 BRANCH  ?= $(shell git rev-parse --abbrev-ref HEAD)
 COMMIT  ?= $(shell git rev-parse HEAD)
 VERSION ?= $(shell git describe --tags --always --dirty --match=v* 2> /dev/null || \
 			cat $(CURDIR)/.version 2> /dev/null || echo v0)
+
 BIN      = $(GOPATH)/bin
 PKGS     = $(or $(PKG),$(shell $(GO) list ./...))
 TESTPKGS = $(shell env $(GO) list -f '{{ if or .TestGoFiles .XTestGoFiles }}{{ .ImportPath }}{{ end }}' $(PKGS))
@@ -117,3 +119,11 @@ help:
 .PHONY: version
 version:
 	@echo $(VERSION)
+
+release:
+	@sd "$(IMAGE):latest" "$(IMAGE):$(VERSION)" $$(rg -l -- $(IMAGE) manifests/)
+	@git add -- manifests/
+	@git commit -m "Release $(VERSION)"
+	@sd "$(IMAGE):$(VERSION)" "$(IMAGE):latest" $$(rg -l -- "$(IMAGE)" manifests/)
+	@git add -- manifests/
+	@git commit -m "Clean up release $(VERSION)"
