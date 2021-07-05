@@ -85,7 +85,7 @@ spec:
             secretName: k8s-sidecar-injector-webhook-server-cert
       containers:
         - name: "k8s-sidecar-injector"
-          image: quay.io/utilitywarehouse/k8s-sidecar-injector:v0.7.2
+          image: quay.io/utilitywarehouse/k8s-sidecar-injector:latest
           command: ["entrypoint.sh"]
           args: []
           ports:
